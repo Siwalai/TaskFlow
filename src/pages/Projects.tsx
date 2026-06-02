@@ -7,10 +7,11 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTaskFlow } from "../context/TaskFlowContext";
 import AssigneeAvatar from "../components/AssigneeAvatar";
-import { Plus, FolderPlus, Sparkles, Folder, Calendar, Info, X } from "lucide-react";
+import { Plus, FolderPlus, Calendar, Info, X, Users, Check, Shield } from "lucide-react";
+import { Project } from "../types";
 
 export default function Projects() {
-  const { projects, tasks, users, createProject } = useTaskFlow();
+  const { projects, tasks, users, createProject, updateProjectMembers } = useTaskFlow();
   const navigate = useNavigate();
 
   // Create Project states
@@ -19,6 +20,12 @@ export default function Projects() {
   const [projDesc, setProjDesc] = useState("");
   const [projColor, setProjColor] = useState("#2563EB"); // Default Blue
   const [projError, setProjError] = useState("");
+
+  // Manage Project Members states
+  const [showManageMembers, setShowManageMembers] = useState(false);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [tempMemberIds, setTempMemberIds] = useState<string[]>([]);
+  const [memberSearchQuery, setMemberSearchQuery] = useState("");
 
   const colorOptions = [
     "#2563EB", // Primary Blue
@@ -52,6 +59,26 @@ export default function Projects() {
     setProjDesc("");
     setProjColor("#2563EB");
     setShowCreateProj(false);
+  };
+
+  const handleToggleMember = (userId: string) => {
+    if (tempMemberIds.includes(userId)) {
+      // Prevent removing the last member completely just as a validation safeguard
+      if (tempMemberIds.length === 1) return;
+      setTempMemberIds(tempMemberIds.filter((id) => id !== userId));
+    } else {
+      setTempMemberIds([...tempMemberIds, userId]);
+    }
+  };
+
+  const handleSaveMembers = () => {
+    if (selectedProject) {
+      updateProjectMembers(selectedProject.id, tempMemberIds);
+      setShowManageMembers(false);
+      setSelectedProject(null);
+      setTempMemberIds([]);
+      setMemberSearchQuery("");
+    }
   };
 
   return (
@@ -123,17 +150,34 @@ export default function Projects() {
 
               {/* Footer summaries */}
               <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-450 text-slate-400">
-                {/* Members row list avatars */}
-                <div className="flex -space-x-1 overflow-hidden" title="Workspace Members">
-                  {projMembers.map((m) => (
-                    <AssigneeAvatar
-                      key={m.id}
-                      name={m.name}
-                      color={m.color}
-                      size="sm"
-                      tooltipText={`${m.name} (${m.role})`}
-                    />
-                  ))}
+                {/* Members row list avatars with add/remove capability */}
+                <div className="flex items-center space-x-2">
+                  <div className="flex -space-x-1 overflow-hidden" title="Workspace Members">
+                    {projMembers.map((m) => (
+                      <AssigneeAvatar
+                        key={m.id}
+                        name={m.name}
+                        color={m.color}
+                        size="sm"
+                        tooltipText={`${m.name} (${m.role})`}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Add / Manage project members trigger */}
+                  <button
+                    id={`add-project-member-trigger-${proj.id}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedProject(proj);
+                      setTempMemberIds([...proj.memberIds]);
+                      setShowManageMembers(true);
+                    }}
+                    className="w-6 h-6 rounded-full border border-dashed border-slate-300 hover:border-blue-500 text-slate-400 hover:text-blue-550 flex items-center justify-center transition-all cursor-pointer bg-white/50"
+                    title="Manage Project Members (Add/Remove)"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
                 </div>
 
                 {/* Last updated timestamp */}
@@ -256,7 +300,139 @@ export default function Projects() {
           </div>
         </div>
       )}
+
+      {/* Project Member Management Overlay */}
+      {showManageMembers && selectedProject && (
+        <div
+          id="project-members-modal-overlay"
+          className="fixed inset-0 bg-slate-900/45 backdrop-blur-md z-50 flex items-center justify-center p-4 select-none"
+          onClick={() => {
+            setShowManageMembers(false);
+            setSelectedProject(null);
+            setTempMemberIds([]);
+            setMemberSearchQuery("");
+          }}
+        >
+          <div
+            id="project-members-modal-panel"
+            className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/40 dark:border-white/10 max-w-md w-full p-6 space-y-4 animate-fade-in text-slate-850 dark:text-slate-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-white/10">
+              <div className="space-y-0.5">
+                <h3 className="text-sm font-extrabold text-slate-800 dark:text-white uppercase tracking-wider flex items-center space-x-1.5">
+                  <Users className="w-4.5 h-4.5 text-blue-600 dark:text-blue-400" />
+                  <span>Workspace Members</span>
+                </h3>
+                <p className="text-[11px] text-slate-450 text-slate-500 dark:text-slate-400 font-medium">
+                  Grant access or restrict members for <strong className="text-slate-705 dark:text-slate-200">{selectedProject.name}</strong>
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowManageMembers(false);
+                  setSelectedProject(null);
+                  setTempMemberIds([]);
+                  setMemberSearchQuery("");
+                }}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors p-0.5 rounded cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick Member Search box */}
+            <div className="relative">
+              <input
+                id="member-modal-search"
+                type="text"
+                placeholder="Search team roster..."
+                value={memberSearchQuery}
+                onChange={(e) => setMemberSearchQuery(e.target.value)}
+                className="w-full text-xs font-semibold p-2 bg-white/40 border border-slate-200/60 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-lg outline-none transition-all"
+              />
+            </div>
+
+            {/* Members scrolling roster list */}
+            <div id="modal-members-roster-list" className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
+              {users
+                .filter((u) => u.name.toLowerCase().includes(memberSearchQuery.toLowerCase()))
+                .map((u) => {
+                  const isChecked = tempMemberIds.includes(u.id);
+                  return (
+                    <div
+                      key={u.id}
+                      id={`modal-member-row-${u.id}`}
+                      onClick={() => handleToggleMember(u.id)}
+                      className={`flex items-center justify-between p-2 rounded-xl transition-all cursor-pointer border ${
+                        isChecked
+                          ? "bg-blue-50/40 dark:bg-blue-950/20 border-blue-500/30"
+                          : "bg-white/40 dark:bg-slate-850/20 border-transparent hover:bg-white/80 dark:hover:bg-slate-800/80"
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2.5 min-w-0">
+                        <AssigneeAvatar name={u.name} color={u.color} size="md" />
+                        <div className="min-w-0 text-left">
+                          <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate flex items-center">
+                            <span>{u.name}</span>
+                            {u.role === "Team Lead" && (
+                              <Shield className="w-3 h-3 text-blue-500 ml-1 flex-shrink-0" />
+                            )}
+                          </p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-450 truncate font-semibold">
+                            {u.role} &bull; {u.email}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Custom circular selection marker indicator */}
+                      <div
+                        id={`member-check-sphere-${u.id}`}
+                        className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors flex-shrink-0 ${
+                          isChecked
+                            ? "bg-blue-600 border-blue-600 text-white"
+                            : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                        }`}
+                      >
+                        {isChecked && <Check className="w-3.5 h-3.5" />}
+                      </div>
+                    </div>
+                  );
+                })}
+
+              {users.filter((u) => u.name.toLowerCase().includes(memberSearchQuery.toLowerCase())).length === 0 && (
+                <div className="text-center py-6 text-slate-400">
+                  <p className="text-xs">No project members found</p>
+                </div>
+              )}
+            </div>
+
+            {/* Actions submit footer bar */}
+            <div className="flex items-center justify-end space-x-2 pt-3.5 border-t border-slate-100 dark:border-white/10">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowManageMembers(false);
+                  setSelectedProject(null);
+                  setTempMemberIds([]);
+                  setMemberSearchQuery("");
+                }}
+                className="px-3.5 py-1.5 text-xs font-semibold text-slate-500 hover:text-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg border border-slate-200 dark:border-white/10 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveMembers}
+                className="px-4 py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors cursor-pointer"
+              >
+                Save Members
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

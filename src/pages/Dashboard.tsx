@@ -19,9 +19,51 @@ import {
   History,
   FolderSync,
 } from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+  ResponsiveContainer,
+  Cell,
+} from "recharts";
+
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    const totalItem = payload.find((p: any) => p.dataKey === "Total Tasks" || p.name === "Total Tasks");
+    const completedItem = payload.find((p: any) => p.dataKey === "Completed" || p.name === "Completed Tasks");
+    const total = totalItem ? totalItem.value : 0;
+    const completed = completedItem ? completedItem.value : 0;
+    const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    return (
+      <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-3.5 border border-slate-200 dark:border-white/10 rounded-xl shadow-xl text-xs space-y-1.5 font-sans min-w-[170px] select-none text-slate-800 dark:text-slate-100">
+        <p className="font-bold text-slate-905 dark:text-white border-b border-slate-100 dark:border-white/10 pb-1">{label}</p>
+        <div className="space-y-1 font-semibold pt-0.5">
+          <p className="text-slate-500 dark:text-slate-400 flex items-center justify-between">
+            <span>Total Tasks:</span>
+            <span className="text-slate-800 dark:text-slate-100 font-extrabold">{total}</span>
+          </p>
+          <p className="text-blue-600 dark:text-blue-400 flex items-center justify-between">
+            <span>Completed:</span>
+            <span className="font-extrabold">{completed}</span>
+          </p>
+          <p className="text-emerald-600 dark:text-emerald-400 flex items-center justify-between pt-1 border-t border-slate-100 dark:border-white/5 font-extrabold">
+            <span>Completion Rate:</span>
+            <span>{rate}%</span>
+          </p>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
 
 export default function Dashboard() {
-  const { tasks, projects, activity, users, currentUser, setActiveTaskId } = useTaskFlow();
+  const { tasks, projects, activity, users, currentUser, setActiveTaskId, theme } = useTaskFlow();
   const navigate = useNavigate();
 
   // Filter tasks assigned to current user
@@ -189,6 +231,105 @@ export default function Dashboard() {
                 );
               })}
             </div>
+          </div>
+
+          {/* Project Analytics Section (Recharts Bar Chart) */}
+          <div id="dashboard-analytics-section" className="space-y-4">
+            <h2 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center space-x-1.5">
+              <TrendingUp className="w-4 h-4 text-slate-400" />
+              <span>Project Performance Analytics</span>
+            </h2>
+
+            {projects.length > 0 ? (
+              <div className="bg-white/70 backdrop-blur-md border border-white/40 rounded-xl p-5 shadow-sm">
+                <div className="mb-4">
+                  <h3 className="text-sm font-bold text-slate-800 dark:text-white">Workspace Completion Rates</h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    Compare total vs completed engineering & design tasks across active projects.
+                  </p>
+                </div>
+
+                <div className="h-64 w-full" id="projects-recharts-container">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={projects.map((proj) => {
+                        const { total, done, progress } = getProjectStats(proj.id);
+                        return {
+                          name: proj.name.length > 15 ? `${proj.name.slice(0, 15)}...` : proj.name,
+                          "Total Tasks": total,
+                          "Completed Tasks": done,
+                          "Completion Rate": progress,
+                          color: proj.color || "#3b82f6",
+                        };
+                      })}
+                      margin={{ top: 10, right: 10, left: -20, bottom: 5 }}
+                    >
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke={theme === "dark" ? "rgba(255, 255, 255, 0.08)" : "#f1f5f9"}
+                        vertical={false}
+                      />
+                      <XAxis
+                        dataKey="name"
+                        tick={{ fill: theme === "dark" ? "#94a3b8" : "#64748b", fontSize: 10, fontWeight: 550 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        tick={{ fill: theme === "dark" ? "#94a3b8" : "#64748b", fontSize: 10, fontWeight: 550 }}
+                        axisLine={false}
+                        tickLine={false}
+                        allowDecimals={false}
+                      />
+                      <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: theme === "dark" ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.02)" }} />
+                      <Legend
+                        verticalAlign="top"
+                        height={36}
+                        iconType="circle"
+                        iconSize={8}
+                        wrapperStyle={{ fontSize: "11px", fontWeight: 600, color: theme === "dark" ? "#94a3b8" : "#64748b" }}
+                      />
+                      <Bar
+                        dataKey="Total Tasks"
+                        fill="#3b82f6"
+                        radius={[4, 4, 0, 0]}
+                        barSize={20}
+                        name="Total Tasks"
+                      >
+                        {projects.map((proj, idx) => (
+                          <Cell
+                            key={`cell-total-${idx}`}
+                            fill={proj.color || "#3b82f6"}
+                            opacity={0.25}
+                          />
+                        ))}
+                      </Bar>
+                      <Bar
+                        dataKey="Completed Tasks"
+                        fill="#10b981"
+                        radius={[4, 4, 0, 0]}
+                        barSize={20}
+                        name="Completed Tasks"
+                      >
+                        {projects.map((proj, idx) => (
+                          <Cell
+                            key={`cell-completed-${idx}`}
+                            fill={proj.color || "#3b10b9"}
+                            opacity={0.85}
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white/70 backdrop-blur-md border border-white/40 rounded-xl p-8 text-center">
+                <TrendingUp className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                <p className="text-xs font-bold text-slate-700 dark:text-slate-250">No metrics available</p>
+                <p className="text-[10px] text-slate-400 mt-1">Create projects and assign tasks to view performance analytics.</p>
+              </div>
+            )}
           </div>
 
           {/* Personal assigned Tasks widget - My Tasks */}

@@ -4,7 +4,7 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { User, Project, Task, Comment, ActivityLog, Priority, TaskStatus } from "../types";
+import { User, Project, Task, Comment, ActivityLog, Priority, TaskStatus, UserRole } from "../types";
 import {
   getStoredUsers,
   saveStoredUsers,
@@ -49,6 +49,10 @@ interface TaskFlowContextType {
 
   // Project Methods
   createProject: (name: string, description: string, color: string) => boolean;
+  updateProjectMembers: (projectId: string, memberIds: string[]) => void;
+
+  // Team / User Methods
+  addTeamMember: (memberData: { name: string; email: string; role: UserRole; timezone: string; color: string }) => void;
 
   // Comment Methods
   addComment: (taskId: string, body: string, mentions: string[]) => void;
@@ -253,6 +257,49 @@ export const TaskFlowProvider = ({ children }: { children: ReactNode }) => {
     return true;
   };
 
+  const updateProjectMembers = (projectId: string, memberIds: string[]) => {
+    const updatedProjects = projects.map((p) => {
+      if (p.id === projectId) {
+        return {
+          ...p,
+          memberIds,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return p;
+    });
+    updateProjectsState(updatedProjects);
+    logActivity("", projectId, currentUser.id, "updated project members");
+    syncActivityState();
+  };
+
+  const addTeamMember = (memberData: { name: string; email: string; role: UserRole; timezone: string; color: string }) => {
+    const nextId = `u-${Date.now()}`;
+    const initials = memberData.name
+      .split(" ")
+      .map((n) => n ? n[0] : "")
+      .join("")
+      .toUpperCase()
+      .slice(0, 2) || "U";
+
+    const newUser: User = {
+      id: nextId,
+      name: memberData.name.trim(),
+      email: memberData.email.trim(),
+      role: memberData.role,
+      avatarUrl: null,
+      initials,
+      color: memberData.color,
+      timezone: memberData.timezone,
+    };
+
+    const nextUsers = [...users, newUser];
+    updateUsersState(nextUsers);
+    
+    logActivity("", "", currentUser.id, `added team member ${memberData.name}`);
+    syncActivityState();
+  };
+
   const addComment = (taskId: string, body: string, mentions: string[]) => {
     const newComment: Comment = {
       id: `c-${Date.now()}`,
@@ -346,6 +393,8 @@ export const TaskFlowProvider = ({ children }: { children: ReactNode }) => {
         deleteTask,
         moveTask,
         createProject,
+        updateProjectMembers,
+        addTeamMember,
         addComment,
         deleteComment,
         updateProfile,
